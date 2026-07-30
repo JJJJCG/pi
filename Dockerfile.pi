@@ -1,0 +1,14 @@
+FROM node:24-bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends bash ca-certificates git ripgrep \
+  && rm -rf /var/lib/apt/lists/*
+COPY officecli-linux-x64 /usr/local/bin/officecli
+RUN chmod +x /usr/local/bin/officecli
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+
+# 预配置 skills
+COPY agent-skills/ /root/.pi/agent/skills/
+
+WORKDIR /workspace
+ENTRYPOINT ["pi"]
