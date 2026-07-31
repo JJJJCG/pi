@@ -1,0 +1,12 @@
+services:
+  pi:
+    image: ghcr.io/jjjjcg/pi:latest
+    container_name: pi
+    stdin_open: true          # 相当于 docker run -it,保持交互
+    tty: true
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+    volumes:
+      - ./:/workspace              # 当前项目目录挂载进容器
+      - ~/.pi/agent:/root/.pi/agent   # bind mount 宿主机 ~/.pi/agent,持久化 auth/会话/设置
+    restart: "no"
