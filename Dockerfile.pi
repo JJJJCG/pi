@@ -11,8 +11,5 @@ ENV PATH="/root/.local/bin:${PATH}"
 
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
-# 预配置 skills
-COPY agent-skills/ /root/.pi/agent/skills/
-
 WORKDIR /workspace
 ENTRYPOINT ["pi"]
