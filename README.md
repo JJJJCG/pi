@@ -1,3 +1,17 @@
+> **Fork notice**: This fork provides a Pi Docker image with **officecli** and **ffmpeg** preinstalled, built from the included `Dockerfile.pi`. Run it with the included `docker-compose.yml`:
+>
+> ```bash
+> docker compose up
+> ```
+>
+> Or build/pull manually:
+>
+> ```bash
+> docker build -f Dockerfile.pi -t pi-sandbox .
+> docker run --rm -it pi-sandbox
+> # or: docker pull ghcr.io/jjjjcg/pi:latest
+> ```
+
 <p align="center">
   <a href="https://pi.dev">
     <img alt="pi logo" src="https://pi.dev/logo-auto.svg" width="128">
