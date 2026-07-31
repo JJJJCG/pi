@@ -34,10 +34,10 @@ jobs:
       - name: Compute image tags
         id: tags
         run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
           TAGS="${IMAGE}:latest"
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            TAGS="${TAGS},${IMAGE}:${GITHUB_REF_NAME}"
+            TAGS="${TAGS},${IMAGE}:${GITHUB_REF_NAME,,}"
           fi
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
