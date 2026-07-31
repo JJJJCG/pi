@@ -1,11 +1,19 @@
 FROM node:24-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends bash ca-certificates git ripgrep fd-find \
-  && rm -rf /var/lib/apt/lists/*
-COPY officecli-linux-x64 /usr/local/bin/officecli
-RUN chmod +x /usr/local/bin/officecli
+  && apt-get install -y --no-install-recommends bash ca-certificates curl git ripgrep fd-find ffmpeg \
+  && rm -rf /var/lib/apt/lists/* \
+  && curl -fsSL https://d.officecli.ai/install.sh | bash \
+  && /root/.local/bin/officecli --version
+
+# install.sh 将 officecli 安装到 ~/.local/bin
+ENV PATH="/root/.local/bin:${PATH}"
+
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+
+# 预装 wechatbot 扩展(用户级安装到 /root/.pi/agent,启动后直接可用 /wechat)
+RUN pi install npm:@wechatbot/pi-agent \
+  && pi list
 
 # 预配置 skills
 COPY agent-skills/ /root/.pi/agent/skills/
