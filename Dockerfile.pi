@@ -11,10 +11,6 @@ ENV PATH="/root/.local/bin:${PATH}"
 
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
-# 预装 wechatbot 扩展(用户级安装到 /root/.pi/agent,启动后直接可用 /wechat)
-RUN pi install npm:@wechatbot/pi-agent \
-  && pi list
-
 # 预配置 skills
 COPY agent-skills/ /root/.pi/agent/skills/
 
