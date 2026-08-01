@@ -91,6 +91,7 @@ import { DefaultPackageManager } from "../../core/package-manager.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionEntry, SessionManager, sessionEntryToContextMessages } from "../../core/session-manager.ts";
+import type { UiMode } from "../../core/settings-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
@@ -324,12 +325,12 @@ export interface InteractiveModeOptions {
 	initialMessages?: string[];
 	/** Force verbose startup (overrides quietStartup setting) */
 	verbose?: boolean;
-	/** Use the alternate-screen TUI renderer. */
-	alt?: boolean;
+	/** UI layout mode. */
+	uiMode?: UiMode;
 }
 
 interface InteractiveTuiOptions {
-	alt: boolean;
+	uiMode: UiMode;
 	showHardwareCursor: boolean;
 	logDirectory: string;
 	terminal?: Terminal;
@@ -338,7 +339,7 @@ interface InteractiveTuiOptions {
 /** Composition root for selecting the interactive terminal renderer. */
 export function createInteractiveTui(options: InteractiveTuiOptions): TUI {
 	const terminal = options.terminal ?? new ProcessTerminal();
-	if (options.alt) {
+	if (options.uiMode === "fullscreen") {
 		return new TuiAltScreen(terminal, options.showHardwareCursor, options.logDirectory, { openUrl: openBrowser });
 	}
 	return new TuiMainScreen(terminal, options.showHardwareCursor, options.logDirectory);
@@ -350,6 +351,7 @@ export class InteractiveMode {
 	private loadedResourcesContainer: Container;
 	private chatContainer: Container;
 	private documentContainer: Container;
+	private transcriptScrollView: TuiLayouts.ScrollView | undefined;
 	private pendingMessagesContainer: Container;
 	private statusContainer: Container;
 	private defaultEditor: CustomEditor;
@@ -473,7 +475,8 @@ export class InteractiveMode {
 
 	constructor(runtimeHost: AgentSessionRuntime, options: InteractiveModeOptions = {}) {
 		this.runtimeHost = runtimeHost;
-		this.options = options;
+		const uiMode = options.uiMode ?? this.settingsManager.getUiMode();
+		this.options = { ...options, uiMode };
 		this.autoTrustOnReloadCwd = options.autoTrustOnReloadCwd;
 		this.runtimeHost.setBeforeSessionInvalidate(() => {
 			this.resetExtensionUI();
@@ -483,7 +486,7 @@ export class InteractiveMode {
 		});
 		this.version = VERSION;
 		this.ui = createInteractiveTui({
-			alt: options.alt ?? false,
+			uiMode,
 			showHardwareCursor: this.settingsManager.getShowHardwareCursor(),
 			logDirectory: getAgentDir(),
 		});
@@ -743,10 +746,12 @@ export class InteractiveMode {
 		// Populate stable regions before selecting the renderer-specific composition.
 		this.renderWidgets(); // Initialize with default spacer
 		if (TuiLayouts.isViewportTUI(this.ui)) {
-			const transcript = new TuiLayouts.ScrollView(this.documentContainer, {
+			this.transcriptScrollView = new TuiLayouts.ScrollView(this.documentContainer, {
 				follow: "end",
 				primary: true,
 				overscroll: "chain",
+				scrollbar: this.settingsManager.getFullscreenScrollbar(),
+				scrollbarStyle: (text) => theme.bg("scrollbarThumb", text),
 			});
 			const dock = new TuiLayouts.VStack([
 				{ component: this.pendingMessagesContainer, shrink: 1, minSize: 0 },
@@ -758,7 +763,7 @@ export class InteractiveMode {
 			]);
 			this.ui.setLayoutRoot(
 				new TuiLayouts.VStack([
-					{ component: transcript, basis: 0, grow: 1, shrink: 1, minSize: 1 },
+					{ component: this.transcriptScrollView, basis: 0, grow: 1, shrink: 1, minSize: 1 },
 					{ component: dock, basis: "auto", grow: 0, shrink: 1, minSize: 1 },
 				]),
 			);
@@ -1765,8 +1770,13 @@ export class InteractiveMode {
 		this.showStartupNoticesIfNeeded();
 	}
 
+	private applyFullscreenScrollbarSetting(): void {
+		this.transcriptScrollView?.setScrollbar(this.settingsManager.getFullscreenScrollbar());
+	}
+
 	private applyRuntimeSettings(): void {
 		configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
+		this.applyFullscreenScrollbarSetting();
 		this.footer.setSession(this.session);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
 		this.footerDataProvider.setCwd(this.sessionManager.getCwd());
@@ -1927,7 +1937,7 @@ export class InteractiveMode {
 		this.activeStatusIndicator?.dispose();
 		this.activeStatusIndicator = undefined;
 		this.statusContainer.clear();
-		if (hadActiveStatusIndicator && !this.options.alt && this.ui.getClearOnShrink()) {
+		if (hadActiveStatusIndicator && this.options.uiMode === "regular" && this.ui.getClearOnShrink()) {
 			this.statusContainer.addChild(this.idleStatus);
 		}
 	}
@@ -4232,6 +4242,8 @@ export class InteractiveMode {
 					quietStartup: this.settingsManager.getQuietStartup(),
 					clearOnShrink: this.settingsManager.getClearOnShrink(),
 					showTerminalProgress: this.settingsManager.getShowTerminalProgress(),
+					uiMode: this.settingsManager.getUiMode(),
+					fullscreenScrollbar: this.settingsManager.getFullscreenScrollbar(),
 					warnings: this.settingsManager.getWarnings(),
 				},
 				{
@@ -4371,6 +4383,14 @@ export class InteractiveMode {
 					},
 					onShowTerminalProgressChange: (enabled) => {
 						this.settingsManager.setShowTerminalProgress(enabled);
+					},
+					onUiModeChange: (mode) => {
+						this.settingsManager.setUiMode(mode);
+						this.showStatus(`UI mode: ${mode} (restart required)`);
+					},
+					onFullscreenScrollbarChange: (mode) => {
+						this.settingsManager.setFullscreenScrollbar(mode);
+						this.applyFullscreenScrollbarSetting();
 					},
 					onWarningsChange: (warnings) => {
 						this.settingsManager.setWarnings(warnings);
@@ -5443,7 +5463,6 @@ export class InteractiveMode {
 		try {
 			await this.session.reload({ beforeSessionStart: restoreChatBeforeSessionStart });
 			restoreChatBeforeSessionStart();
-			configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
 			this.keybindings.reload();
 			const activeHeader = this.customHeader ?? this.builtInHeader;
 			if (isExpandable(activeHeader)) {
@@ -5451,20 +5470,7 @@ export class InteractiveMode {
 			}
 			setRegisteredThemes(this.session.resourceLoader.getThemes().themes);
 			await this.themeController.applyFromSettings();
-			const editorPaddingX = this.settingsManager.getEditorPaddingX();
-			const autocompleteMaxVisible = this.settingsManager.getAutocompleteMaxVisible();
-			this.defaultEditor.setPaddingX(editorPaddingX);
-			this.defaultEditor.setAutocompleteMaxVisible(autocompleteMaxVisible);
-			if (this.editor !== this.defaultEditor) {
-				this.editor.setPaddingX?.(editorPaddingX);
-				this.editor.setAutocompleteMaxVisible?.(autocompleteMaxVisible);
-			}
-			this.ui.setShowHardwareCursor(this.settingsManager.getShowHardwareCursor());
-			const clearOnShrink = this.settingsManager.getClearOnShrink();
-			this.ui.setClearOnShrink(clearOnShrink);
-			if (!clearOnShrink && !this.activeStatusIndicator) {
-				this.statusContainer.clear();
-			}
+			this.applyRuntimeSettings();
 			this.setupAutocompleteProvider();
 			const runner = this.session.extensionRunner;
 			this.setupExtensionShortcuts(runner);
