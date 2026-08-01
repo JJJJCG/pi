@@ -1,7 +1,7 @@
 FROM node:24-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends bash ca-certificates curl git ripgrep fd-find ffmpeg \
+  && apt-get install -y --no-install-recommends bash ca-certificates curl git ripgrep fd-find ffmpeg jq cron tzdata \
   && rm -rf /var/lib/apt/lists/* \
   && curl -fsSL https://d.officecli.ai/install.sh | bash \
   && /root/.local/bin/officecli --version
@@ -9,7 +9,16 @@ RUN apt-get update \
 # install.sh 将 officecli 安装到 ~/.local/bin
 ENV PATH="/root/.local/bin:${PATH}"
 
+# 容器时区设为北京时间，cron 定时任务按此时间执行
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+  && echo $TZ > /etc/timezone
+
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
+# 启动 cron 守护进程后再运行 pi（"$@" 透传 docker run 附加的参数）
+RUN printf '#!/bin/sh\ncron\nexec pi "$@"\n' > /usr/local/bin/pi-entrypoint \
+  && chmod +x /usr/local/bin/pi-entrypoint
+
 WORKDIR /workspace
-ENTRYPOINT ["pi"]
+ENTRYPOINT ["/usr/local/bin/pi-entrypoint"]
