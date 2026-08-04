@@ -1,7 +1,7 @@
 FROM node:24-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends bash ca-certificates curl git ripgrep fd-find ffmpeg jq cron tzdata \
+  && apt-get install -y --no-install-recommends bash ca-certificates curl git ripgrep fd-find ffmpeg jq cron tzdata xxd socat \
   && rm -rf /var/lib/apt/lists/* \
   && curl -fsSL https://d.officecli.ai/install.sh | bash \
   && /root/.local/bin/officecli --version
