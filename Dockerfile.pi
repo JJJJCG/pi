@@ -1,10 +1,20 @@
 FROM node:24-bookworm-slim
 
+# 构建架构（BuildKit 自动注入，用于选择 cap 对应的 release 资产）
+ARG TARGETARCH
+
 RUN apt-get update \
   && apt-get install -y --no-install-recommends bash ca-certificates curl git ripgrep fd-find ffmpeg jq cron tzdata xxd socat \
   && rm -rf /var/lib/apt/lists/* \
   && curl -fsSL https://d.officecli.ai/install.sh | bash \
   && /root/.local/bin/officecli --version
+
+# 预置 cap（https://github.com/JJJJCG/cap）最新 release 到 /usr/local/bin，
+# 每次构建时通过 GitHub API 获取 latest tag，并按 TARGETARCH 下载对应资产
+RUN arch="${TARGETARCH:-amd64}" \
+  && tag="$(curl -fsSL https://api.github.com/repos/JJJJCG/cap/releases/latest | jq -r .tag_name)" \
+  && curl -fsSL -o /usr/local/bin/cap "https://github.com/JJJJCG/cap/releases/download/${tag}/cap-linux-${arch}" \
+  && chmod +x /usr/local/bin/cap
 
 # install.sh 将 officecli 安装到 ~/.local/bin
 ENV PATH="/root/.local/bin:${PATH}"
